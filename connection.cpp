@@ -60,14 +60,171 @@ namespace zdb{
             return nullptr;
         }
 
-        if(!m_res.bind()){
-            
+        if(!m_res.bind(mysql_store_result(m_conn), error)){
+            return 0;
         }
+
+        return &m_res;
     }
 
     MYSQL_RES* query(const char* sz_sql, std::string& error)
     {
+        if(!is_open()){
+            error = "not connected to database.";
+            return 0;
+        }
 
+        if(mysql_query(m_conn, sz_sql)){
+            error = "failed to call mysql_query, last_error=";
+            error += get_last_error();
+            return 0;
+        }
+
+        return mysql_store_result(m_conn);
+    }
+
+    my_ulonglong connection::excute_affect_rows(const char* sz_sql, std::string& error)
+    {
+        if(!is_open()){
+            error = "not connected to database.";
+            return 1;
+        }
+
+        if(mysql_query(m_conn, sz_sql)){
+            error = "failed to call mysql_query, last_error=";
+            error += get_last_error();
+            return 0;
+        }
+
+        return mysql_affected_rows(m_conn);
+    }
+
+    my_ulonglong connection::excute_real_affect_rows(const char* sz_sql, std::string& error)
+    {
+        if(!is_open()){
+            error = "not connected to database.";
+            return 1;
+        }
+
+        unsigned long len = strlen(sz_sql);
+
+        if(mysql_real_query(m_conn, sz_sql, len)){
+            error = "failed to call mysql_real_query, last_error=";
+            error += get_last_error();
+            return 2;
+        }
+        return mysql_affected_rows(m_conn);
+    }
+
+    int connection::ping(std::string& error)
+    {
+        if(0 == m_conn){
+            error = "not connected to database.";
+            return 1;
+        }
+
+        int ret = -1;
+        ret = mysql_pint(m_conn);
+        if(ret){
+            error = "failed to call mysql_ping, last_error=";
+            error += get_last_error();
+        }
+
+        return ret;
+    }
+
+    my_ulonglong connection::get_last_inserted_id(std::string& error)
+    {
+        if(!is_open()){
+            error = "not connected to database.";
+            return 1;
+        }
+
+        return mysql_insert_id(m_conn);
+    }
+    
+    int connection::auto_commit(bool mode, std::string& error)
+    {
+        if(0 == m_conn){
+            error = "not connected to database.";
+            return 1;
+        }
+
+        return mysql_autocommit(m_conn, mode);
+    }
+
+    int connection::commit(std::string& error)
+    {
+        if(0 == m_conn){
+            error = "not connected to database.";
+            return 1;
+        }
+
+        return mysql_commit(m_conn);
+    }
+
+    int connection::roll_back(std::string& error)
+    {
+        if(0 == m_conn){
+            error = "not connected to database.";
+            return 1;
+        }
+
+        return mysql_rollback(m_conn);
+    }
+
+    bool connection::prepare_stmt(const char* sz_sql, std::string& error)
+    {
+        if(!is_open()){
+            error = "not connected to database.";
+            return 1;
+        }
+
+        stmt_close();
+
+        m_stmt = mysql_stmt_init(m_conn);
+
+        if(mysql_stmt_prepare(m_stmt, sz_sql, strlen(sz_sql)) != 0){
+            error = "failed to call mysql_stmt_prepare, last_error=";
+            error += get_last_error();
+            reurn false;
+        }
+
+        return true;
+    }
+
+    bool connection::stmt_execute(MYSQL_BIND* binds, int64_t* pid, std::string& error)
+    {
+        if(NULL == m_stmt){
+            error = "bind error, m_stmt = null";
+            return false;
+        }
+
+        if(mysql_stmt_bind_param(m_stmt, binds) != 0){
+            error = "failed to call mysql_stmt_bind_param, last_error=";
+            error += get_last_error();
+            return false;
+        }
+
+        if(mysql_stmt_excute(m_stmt) != 0){
+            error = "failed to call mysql_stmt_excute, last_error=";
+            error += get_last_error();
+            return false;
+        }
+
+        if(pid){
+            *pid = mysql_stmt_insert_id(m_stmt);
+        }
+
+        return true;
+    }
+
+    void connection::stmt_close()
+    {
+        if(m_stmt){
+            mysql_stmt_close(m_stmt);
+            m_stmt = 0;
+        }
     }
 
     const char* connection::get_last_error()
