@@ -1,4 +1,7 @@
 #include "pool.h"
+#include <thread>
+#include <chrono>
+#include <algorithm>
 
 namespace zdb{
     std::mutex g_mtx;
@@ -245,8 +248,8 @@ namespace zdb{
     void db_pool::start_async_thread()
     {
         m_running = true;
-        boost::thread conn_thread(boost::bind(&db_pool::async_thread_func, this, this));
-        conn_thread.detach();
+        std::thread thr(std::bind(&db_pool::async_thread_func, this, this));
+        thr.detach();
     }
 
     void db_pool::stop_async_thread()
@@ -258,7 +261,7 @@ namespace zdb{
         m_running = false;
 
         while(!m_is_exited){
-            boost::this_thread::sleep(boost::posix_time::millisec(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
 
         {
@@ -311,7 +314,7 @@ namespace zdb{
                     m_async_conn->close();
                     if(m_async_conn->connect(setting, error) < 0){
                         error = "failed connect to database.";
-                        boost::this_thread::sleep(boost::posix_time::milliseconds(100));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     }
                 }
 

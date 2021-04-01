@@ -23,12 +23,11 @@
 */
 #ifndef zdb_pool_h
 #define zdb_pool_h
-#include <boost/atomic.hpp>
-#include <boost/thread/thread.hpp>
 #include <boost/serialization/singleton.hpp>
 #include <list>
 #include <string>
 #include <mutex>
+#include <atomic>
 #include "connection.h"
 
 namespace zdb{
@@ -212,7 +211,7 @@ namespace zdb{
 };
 
 typedef boost::serialization::singleton<zdb::db_pool> singleton_db_pool;
-#define sdb_pool singleton_db_pool::get_mutable_instance()
-#define sdb_pool_const singleton_db_pool::get_const_instance()
+#define zdb_pool singleton_db_pool::get_mutable_instance()
+#define zdb_pool_const singleton_db_pool::get_const_instance()
 
 #endif
