@@ -5,7 +5,7 @@ namespace zdb{
     {
         m_conn = mysql_init(NULL);
         m_stmt = 0;
-        m_temp_flag = temp;
+        m_tmp_flag = temp;
     }
 
     connection::~connection()
@@ -23,17 +23,21 @@ namespace zdb{
         }
         
         //set charset
-        if(mysql_set_charset_set(m_conn, cfg.m_charset.c_str()) != 0){
+        if(mysql_set_character_set(m_conn, cfg.m_charset.c_str()) != 0){
             error = "failed to call mysql_set_charset_set, last_error=";
             error += get_last_error();
             return false;
         }
 
-        if(!mysql_real_connect(m_conn, cfg.m_host.c_str(), cfg.m_user.c_str(), cfg.m_pwd.c_str(), cfg.m_dbname.c_str(), cfg.m_pwd, NULL, 0)){
+        if(!mysql_real_connect(m_conn, cfg.m_host.c_str(), cfg.m_user.c_str(), cfg.m_pwd.c_str(), cfg.m_dbname.c_str(), cfg.m_port, NULL, 0)){
             error = "failed to call mysql_real_connect, last_error=";
             error += get_last_error();
             return false;
         }
+        mysql_query(m_conn, "set names utf8");
+        // 重连
+        char value = 1;
+        mysql_options(m_conn, MYSQL_OPT_RECONNECT, &value);
 
         return true;
     }
@@ -47,14 +51,14 @@ namespace zdb{
         }
     }
 
-    result_set* execute_query(const char* sz_sql, std::string& error)
+    result_set* connection::execute_query(const char* sql, std::string& error)
     {
         if(!is_open()){
             error = "not connected to database";
             return nullptr;
         }
 
-        if(mysql_query(m_conn, sz_sql)){
+        if(mysql_query(m_conn, sql)){
             error = "failed to call mysql_query! last_error=";
             error += get_last_error();
             return nullptr;
@@ -67,14 +71,14 @@ namespace zdb{
         return &m_res;
     }
 
-    MYSQL_RES* query(const char* sz_sql, std::string& error)
+    MYSQL_RES* connection::query(const char* sql, std::string& error)
     {
         if(!is_open()){
             error = "not connected to database.";
             return 0;
         }
 
-        if(mysql_query(m_conn, sz_sql)){
+        if(mysql_query(m_conn, sql)){
             error = "failed to call mysql_query, last_error=";
             error += get_last_error();
             return 0;
@@ -83,14 +87,14 @@ namespace zdb{
         return mysql_store_result(m_conn);
     }
 
-    my_ulonglong connection::excute_affect_rows(const char* sz_sql, std::string& error)
+    my_ulonglong connection::execute_affect_rows(const char* sql, std::string& error)
     {
         if(!is_open()){
             error = "not connected to database.";
             return 1;
         }
 
-        if(mysql_query(m_conn, sz_sql)){
+        if(mysql_query(m_conn, sql)){
             error = "failed to call mysql_query, last_error=";
             error += get_last_error();
             return 0;
@@ -99,16 +103,16 @@ namespace zdb{
         return mysql_affected_rows(m_conn);
     }
 
-    my_ulonglong connection::excute_real_affect_rows(const char* sz_sql, std::string& error)
+    my_ulonglong connection::execute_real_affect_rows(const char* sql, std::string& error)
     {
         if(!is_open()){
             error = "not connected to database.";
             return 1;
         }
 
-        unsigned long len = strlen(sz_sql);
+        unsigned long len = strlen(sql);
 
-        if(mysql_real_query(m_conn, sz_sql, len)){
+        if(mysql_real_query(m_conn, sql, len)){
             error = "failed to call mysql_real_query, last_error=";
             error += get_last_error();
             return 2;
@@ -124,7 +128,7 @@ namespace zdb{
         }
 
         int ret = -1;
-        ret = mysql_pint(m_conn);
+        ret = mysql_ping(m_conn);
         if(ret){
             error = "failed to call mysql_ping, last_error=";
             error += get_last_error();
@@ -173,7 +177,7 @@ namespace zdb{
         return mysql_rollback(m_conn);
     }
 
-    bool connection::prepare_stmt(const char* sz_sql, std::string& error)
+    bool connection::prepare_stmt(const char* sql, std::string& error)
     {
         if(!is_open()){
             error = "not connected to database.";
@@ -184,10 +188,10 @@ namespace zdb{
 
         m_stmt = mysql_stmt_init(m_conn);
 
-        if(mysql_stmt_prepare(m_stmt, sz_sql, strlen(sz_sql)) != 0){
+        if(mysql_stmt_prepare(m_stmt, sql, strlen(sql)) != 0){
             error = "failed to call mysql_stmt_prepare, last_error=";
             error += get_last_error();
-            reurn false;
+            return false;
         }
 
         return true;
@@ -206,7 +210,7 @@ namespace zdb{
             return false;
         }
 
-        if(mysql_stmt_excute(m_stmt) != 0){
+        if(mysql_stmt_execute(m_stmt) != 0){
             error = "failed to call mysql_stmt_excute, last_error=";
             error += get_last_error();
             return false;
@@ -231,7 +235,7 @@ namespace zdb{
     {
         if(NULL == m_conn)
         {
-            return "";
+            return nullptr;
         }
 
         return mysql_error(m_conn);

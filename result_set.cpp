@@ -1,11 +1,12 @@
 #include "result_set.h"
+#include <string>
 
 namespace zdb{
     result_set::result_set()
     {
         m_query_res = 0;
         m_cur_row = 0;
-        m_field_counts = 0;
+        m_field_count = 0;
     }
 
     result_set::~result_set()
@@ -19,13 +20,13 @@ namespace zdb{
             return;
         }
 
-        for(int i = 0;i < m_field_counts; ++i){
-            MYSQL_FIELD* pfield = mysql_fetch_field_direct(m_query_res, i);
-            if(NULL == pfield){
+        for(int i = 0;i < m_field_count; ++i){
+            MYSQL_FIELD* ptr_field = mysql_fetch_field_direct(m_query_res, i);
+            if(NULL == ptr_field){
                 continue;
             }
 
-            m_field_idx_list.insert(std::make_pair(pfield->name, i));
+            m_field_idx_list.insert(std::make_pair(ptr_field->name, i));
         }
     }
 
@@ -37,11 +38,11 @@ namespace zdb{
 
         if(0 == m_query_res){
             error = "mysql_res is null";
-            m_field_counts = 0;
+            m_field_count = 0;
             return false;
         }
 
-        m_field_counts = mysql_num_fields(res);
+        m_field_count = mysql_num_fields(res);
 
         create_filed_idx_list();
 
@@ -57,7 +58,7 @@ namespace zdb{
         mysql_free_result(m_query_res);
         m_query_res = 0;
         m_cur_row = 0;
-        m_field_counts = 0;
+        m_field_count = 0;
         m_field_idx_list.erase(m_field_idx_list.begin(), m_field_idx_list.end());
         m_field_idx_list.clear();
     }
@@ -110,7 +111,7 @@ namespace zdb{
             return false;
         }
 
-        if(idx < 0 || idx >= m_field_counts){
+        if(idx < 0 || idx >= m_field_count){
             error = "idx is invalid.";
             return false;
         }
@@ -126,157 +127,157 @@ namespace zdb{
     bool result_set::get_field(int idx, int& val, std::string& error)
     {
         val = 0;
-        char* pfield = 0;
+        char* ptr_field = 0;
         bool is_null = false;
 
-        if(!get_field(idx, pfield, is_null, error)){
+        if(!get_field(idx, ptr_field, is_null, error)){
             return false;
         }
 
         if(!is_null){
-            val = atoi(pfield);
+            val = atoi(ptr_field);
         }
 
         return true;
     }
 
-    bool get_field(int idx, unsigned int& val, std::string& error)
+    bool result_set::get_field(int idx, unsigned int& val, std::string& error)
     {
         val = 0;
-        char* pfield = 0;
+        char* ptr_field = 0;
         bool is_null = false;
 
-        if(!get_field(idx, pfield, is_null, error)){
+        if(!get_field(idx, ptr_field, is_null, error)){
             return false;
         }
 
         if(!is_null){
-            val = atoi(pfield);
+            val = atoi(ptr_field);
         }
 
         return true;
     }
         
-    bool get_field(int idx, long long& val, std::string& error)
+    bool result_set::get_field(int idx, long long& val, std::string& error)
     {
         val = 0;
-        char* pfield = 0;
+        char* ptr_field = 0;
         bool is_null = false;
 
-        if(!get_field(idx, pfield, is_null, error)){
+        if(!get_field(idx, ptr_field, is_null, error)){
             return false;
         }
 
         if(!is_null){
-            val = _atoi64(pfield);
+            val = _atoi64(ptr_field);
         }
 
         return true;
     }
         
-    bool get_field(int idx, std::string& val, std::string& error)
+    bool result_set::get_field(int idx, std::string& val, std::string& error)
     {
         val = "";
-        char* pfield = 0;
+        char* ptr_field = 0;
         bool is_null = false;
 
-        if(!get_field(idx, pfield, is_null, error)){
+        if(!get_field(idx, ptr_field, is_null, error)){
             return false;
         }
 
         if(!is_null){
-            val = pfield;
+            val = ptr_field;
         }
 
         return true;
     }
 
-    bool get_field(int idx, char* val, int len, std::string& error)
+    bool result_set::get_field(int idx, char* val, int len, std::string& error)
     {
         memset(val, 0, len);
 
-        char* pfield = 0;
+        char* ptr_field = 0;
         bool is_null = false;
 
-        if(!get_field(idx, pfield, is_null, error)){
+        if(!get_field(idx, ptr_field, is_null, error)){
             return false;
         }
 
         if(!is_null){
-            strncpy(val, pfield, len);
+            strncpy(val, ptr_field, len);
         }
 
         return true;
     }
 
-    bool get_field(int idx, bool& val, std::string& error)
+    bool result_set::get_field(int idx, bool& val, std::string& error)
     {
         val = false;
-        char* pfield = 0;
+        char* ptr_field = 0;
         bool is_null = false;
 
-        if(!get_field(idx, pfield, is_null, error)){
+        if(!get_field(idx, ptr_field, is_null, error)){
             return false;
         }
 
         if(!is_null){
-            val = (atoi(pfield)==1?true:false);
+            val = (atoi(ptr_field)==1?true:false);
         }
 
         return true;
     }
 
-    bool get_field(int idx, float& val, std::string& error)
+    bool result_set::get_field(int idx, float& val, std::string& error)
     {
         val = 0;
-        char* pfield = 0;
+        char* ptr_field = 0;
         bool is_null = false;
 
-        if(!get_field(idx, pfield, is_null, error)){
+        if(!get_field(idx, ptr_field, is_null, error)){
             return false;
         }
 
         if(!is_null){
-            val = atof(pfield);
+            val = atof(ptr_field);
         }
 
         return true;
     }
-    bool get_field(int idx, double& val, std::string& error)
+    bool result_set::get_field(int idx, double& val, std::string& error)
     {
         val = 0;
-        char* pfield = 0;
+        char* ptr_field = 0;
         bool is_null = false;
 
-        if(!get_field(idx, pfield, is_null, error)){
+        if(!get_field(idx, ptr_field, is_null, error)){
             return false;
         }
 
         if(!is_null){
-            val = std::stod(pfield);
+            val = std::stod(ptr_field);
         }
 
         return true;
     }
 
-    bool get_field(int idx, MYSQL_TIME& val, std::string& error)
+    bool result_set::get_field(int idx, MYSQL_TIME& val, std::string& error)
     {
-        m_helper.init_mysql_time(val);
-        char* pfield = 0;
+        db_helper::instance().init_mysql_time(val);
+        char* ptr_field = 0;
         bool is_null = false;
 
-        if(!get_field(idx, pfield, is_null, error)){
+        if(!get_field(idx, ptr_field, is_null, error)){
             return false;
         }
 
         if(!is_null){
-            m_helper.to_datetime(pfield, val);
+            db_helper::instance().to_datetime(ptr_field, val);
         }
 
         return true;
     }
  
-    int get_field_idx_by_name(const char* name, std::string& error)
+    int result_set::get_field_idx_by_name(const char* name, std::string& error)
     {
         auto fi = m_field_idx_list.find(name);
         if(fi == m_field_idx_list.end()){
@@ -288,70 +289,70 @@ namespace zdb{
         return fi->second;
     }
 
-    bool get_field(const char* name, int& val, std::string& error)
+    bool result_set::get_field(const char* name, int& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
         return (idx > 0)?get_field(idx, val, error):false;
     }
 
-    bool get_field(const char* name, long long& val, std::string& error)
+    bool result_set::get_field(const char* name, long long& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
         return (idx > 0)?get_field(idx, val, error):false;
     }
 
-    bool get_field(const char* name, unsigned int& val, std::string& error)
+    bool result_set::get_field(const char* name, unsigned int& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
         return (idx > 0)?get_field(idx, val, error):false;
     }
 
-    bool get_field(const char* name, std::string& val, std::string& error)
+    bool result_set::get_field(const char* name, std::string& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
         return (idx > 0)?get_field(idx, val, error):false;
     }
 
-    bool get_field(const char* name, char* val, int len, std::string& error)
+    bool result_set::get_field(const char* name, char* val, int len, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
         return (idx > 0)?get_field(idx, val, len, error):false;
     }
 
-    bool get_field(const char* name, bool& val, std::string& error)
+    bool result_set::get_field(const char* name, bool& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
         return (idx > 0)?get_field(idx, val, error):false;
     }
 
-    bool get_field(const char* name, float& val, std::string& error)
+    bool result_set::get_field(const char* name, float& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
         return (idx > 0)?get_field(idx, val, error):false;
     }
 
-    bool get_field(const char* name, double& val, std::string& error)
+    bool result_set::get_field(const char* name, double& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
         return (idx > 0)?get_field(idx, val, error):false;
     }
 
-    bool get_field(const char* name, MYSQL_TIME& val, std::string& error)
+    bool result_set::get_field(const char* name, MYSQL_TIME& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
         return (idx > 0)?get_field(idx, val, error):false;
     }
 
-    int is_null(int idx, std::string& error)
+    int result_set::is_null(int idx, std::string& error)
     {
         if(0 == m_cur_row){
             error = "m_cur_row is not initialized.";
@@ -363,8 +364,8 @@ namespace zdb{
             return -1;
         }
 
-        char* pfield = m_cur_row[idx];
-        if(pfield == NULL || pfield[0] == 0){
+        char* ptr_field = m_cur_row[idx];
+        if(ptr_field == NULL || ptr_field[0] == 0){
             return 1;
         }
 

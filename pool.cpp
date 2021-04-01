@@ -7,7 +7,7 @@ namespace zdb{
     db_pool::db_pool()
     {
         g_async_list.reserve(1<<15);
-        m_async_conn = 0;
+        m_async_conn = nullptr;
     }
 
     db_pool::~db_pool()
@@ -15,14 +15,14 @@ namespace zdb{
         close();
     }
 
-    bool create(const db_pool_setting& cfg, std::string& error)
+    bool db_pool::create(const db_pool_setting& cfg, std::string& error)
     {
         return create(cfg, true, error);
     }
 
-    bool create(const db_pool_setting& cfg, bool async, std::string& error)
+    bool db_pool::create(const db_pool_setting& cfg, bool async, std::string& error)
     {
-        std::unique_ptr<std::mutex> lock(m_mtx);
+        std::unique_lock<std::mutex> lock(m_mtx);
 
         if(cfg.m_size < db_pool_min_size){
             error = "db pool's size is too small";
@@ -36,9 +36,9 @@ namespace zdb{
 
         m_pool_setting = cfg;
 
-        if((int)m_idle_conn_list.size() < m_pool_setting.m_size){
+        if((int)m_idle_list.size() < m_pool_setting.m_size){
             for(int i = 0; i < m_pool_setting.m_size; ++i){
-                connection* conn = create_connection(error);
+                ptr_connection conn = create_connection(error);
                 if(!conn){
                     return false;
                 }
@@ -47,109 +47,140 @@ namespace zdb{
 
         if(async || !m_running){
             create_async_connection();
-            start_async_connection();
+            start_async_thread();
         }
 
         return true;
     }
 
-    void close()
+    ptr_connection db_pool::create_connection(std::string& error, bool is_temp = false)
     {
-        std::unique_ptr<std::mutex> lock(m_mtx);
+        db_setting conn_setting = static_cast<db_setting>(m_pool_setting);
+        ptr_connection conn = std::make_shared<zdb::connection>(is_temp);
 
-        stop_async_connection();
+        if(!conn->connect(conn_setting, error)){
+            conn.reset();
+            conn = nullptr;
+            return 0;
+        }
+
+        if(!conn_setting.m_stmt_sql.empty()){
+            if(!conn->prepare_stmt(conn_setting.m_stmt_sql.c_str(), error)){
+                conn.reset();
+                conn = nullptr;
+                return 0;
+            }
+        }
+
+        m_idle_list.push_back(conn);
+
+        return conn;
+    }
+
+    void db_pool::close()
+    {
+        std::lock_guard<std::mutex> lock(m_mtx);
+
+        stop_async_thread();
 
         destroy_async_connection();
 
-        connection* conn = 0;
-        for(auto it : m_work_conn_list){
-            conn = *it;
+        ptr_connection conn = nullptr;
+        for(auto it : m_work_list){
+            conn = it;
             conn->close();
-            delete conn;
-            conn = 0;
+            conn.reset();
+            conn = nullptr;
         }
-        m_work_conn_list.erase(m_work_conn_list.begin(), m_work_conn_list.end());
-        m_work_conn_list.clear();
+        m_work_list.erase(m_work_list.begin(), m_work_list.end());
+        m_work_list.clear();
 
-        for(auto it : m_idle_conn_list){
-            conn = *it;
+        for(auto it : m_idle_list){
+            conn = it;
             conn->close();
-            delete conn;
-            conn = 0;
+            conn.reset();
+            conn = nullptr;
         }
-        m_idle_conn_list.erase(m_idle_conn_list.begin(), m_idle_conn_list.end());
-        m_idle_conn_list.clear();
+        m_idle_list.erase(m_idle_list.begin(), m_idle_list.end());
+        m_idle_list.clear();
     }
 
-    connection* get_connect(std::string& error)
+    ptr_connection db_pool::get_connect(std::string& error)
     {
-        std::unique_ptr<std::mutex> lock(m_mtx);
+        std::lock_guard<std::mutex> lock(m_mtx);
 
-        connection* conn = 0;
+        ptr_connection ptr_conn = nullptr;
 
-        if(m_idle_conn_list.size() > 0){
-            conn = *(m_idle_conn_list.begin());
-            m_idle_conn_list.pop_front();
-            m_work_conn_list.push_back(conn);
+        if(m_idle_list.size() > 0){
+            ptr_conn = *(m_idle_list.begin());
+            m_idle_list.pop_front();
+            m_work_list.push_back(ptr_conn);
         }else{
-            if(m_idle_conn_list.size() < db_pool_max_size){
-                conn = create_connection(error, true);
-                if(!conn){
+            if(m_idle_list.size() < db_pool_max_size){
+                ptr_conn = create_connection(error, true);
+                if(!ptr_conn){
                     error = "failed connect to database";
                     return 0;
                 }
 
-                m_idle_conn_list.pop_front();
-                m_work_conn_list.push_back(conn);
+                m_idle_list.pop_front();
+                m_work_list.push_back(ptr_conn);
             }else{
                 error = "the count of db connection is beyond the max capacity";
                 return 0;
             }
         }
 
-        if(conn){
-            if(conn->ping(error) != 0){
+        if(ptr_conn){
+            if(ptr_conn->ping(error) != 0){
                 db_setting cfg = static_cast<db_setting>(m_pool_setting);
-                conn->close();
-                int ret = conn->connect(cfg, error);
+                ptr_conn->close();
+                int ret = ptr_conn->connect(cfg, error);
                 if(ret < 0){
-                    back(conn);
+                    back(ptr_conn);
                     error = "failed connect to database";
                     return 0;
                 }
             }
         }
 
-        return conn;
+        return ptr_conn;
     }
 
-    void back(connection* pconn)
+    void db_pool::back(ptr_connection ptr_conn)
     {
-        std::unique_ptr<std::mutex> lock(m_mtx);
+        std::lock_guard<std::mutex> lock(m_mtx);
 
-        if(0 == pconn){
+        if(0 == ptr_conn){
             return;
         }
 
-        m_work_conn_list.remove(pconn);
+        m_work_list.remove(ptr_conn);
 
-        if(pconn->is_temp()){
-            delete pconn;
-            pconn = 0;
+        if(ptr_conn->is_temp()){
+            ptr_conn.reset();
+            ptr_conn = nullptr;
         }else{
-            m_idle_conn_list.push_back(pconn);
+            m_idle_list.push_back(ptr_conn);
         }
     }
 
-    bool query(const char* sql, result_set& res, std::string& error)
+    bool db_pool::query(const char* sql, result_set& res, std::string& error)
     {
-        MYSQL_RES* raw_res = query(sql, error);
-        return res.bind(raw_res);
+        ptr_connection conn = get_connect(error);
+        if(conn == nullptr){
+            return false;
+        }
+
+        MYSQL_RES* raw_res = conn->query(sql, error);
+        back(conn);
+
+        return res.bind(raw_res, error);
     }
 
-    MYSQL_RES* query(const char* sql, std::string& error)
+    MYSQL_RES* db_pool::query(const char* sql, std::string& error)
     {
-        connection* conn = get_connect(error);
+        ptr_connection conn = get_connect(error);
         if(0 == conn){
             return nullptr;
         }
@@ -160,77 +191,65 @@ namespace zdb{
         return res;
     }
 
-    my_ulonglong execute_sql(const char* sql, std::string& error)
+    my_ulonglong db_pool::execute_affect_rows(const char* sql, std::string& error)
     {
-        connection* conn = get_connect(error);
+        ptr_connection conn = get_connect(error);
         if(0 == conn){
-            return nullptr;
+            return 0;
         }
 
-        my_ulonglong ret = conn->execute_sql(sql, error);
+        my_ulonglong ret = conn->execute_affect_rows(sql, error);
+        back(conn);
+
+        return ret;
+    }
+    my_ulonglong db_pool::execute_real_affect_rows( const char *sql, std::string& error)
+    {
+        ptr_connection conn = get_connect(error);
+        if(0 == conn){
+            return 0;
+        }
+
+        my_ulonglong ret = conn->execute_real_affect_rows(sql, error);
         back(conn);
 
         return ret;
     }
 
-    connection* create_connection(std::string& error, bool is_temp = false)
-    {
-        db_setting conn_setting = static_cast<db_setting>(m_pool_setting);
-        connection* conn = new connection(is_temp);
-
-        if(!conn->connect(conn_setting, error)){
-            delete conn;
-            conn = 0;
-            return 0;
-        }
-
-        if(!conn_setting.m_stmt_sql.empty()){
-            if(!conn->prepare_stmt(conn_setting.m_stmt_sql.c_str(), error)){
-                delete conn;
-                conn = 0;
-                return 0;
-            }
-        }
-
-        m_idle_conn_list.push_back(conn);
-
-        return conn;
-    }
-
-    void create_async_connection()
+    void db_pool::create_async_connection()
     {
         std::string error = "";
 
         destroy_async_connection();
 
         db_setting cfg = static_cast<db_setting>(m_pool_setting);
-        connection* conn = new connection();
+        ptr_connection conn = std::make_shared<connection>();
         if(!conn->connect(cfg, error)){
-            delete conn;
-            conn = 0;
+            conn.reset();
+            conn = nullptr;
             return;
         }
 
         m_async_conn = conn;
     }
 
-    void destroy_async_connection()
+    void db_pool::destroy_async_connection()
     {
         if(m_async_conn){
             m_async_conn->close();
-            delete m_async_conn;
-            m_async_conn = 0;
+            m_async_conn.reset();
+            m_async_conn = nullptr;
         }
     }
 
-    void start_async_connection()
+    void db_pool::start_async_thread()
     {
         m_running = true;
         boost::thread conn_thread(boost::bind(&db_pool::async_thread_func, this, this));
         conn_thread.detach();
     }
 
-    void stop_async_connection()
+    void db_pool::stop_async_thread()
     {
         if(!m_running){
             return;
@@ -252,19 +271,19 @@ namespace zdb{
         }
     }
 
-    void async_thread_func(db_pool* owner)
+    void db_pool::async_thread_func(db_pool* owner)
     {
         while(owner->m_running){
             if(!g_async_list.empty()){
                 std::vector<async_sql*> async_list;
-                async_sql.reserve(1<<15);
+                async_list.reserve(1<<15);
 
                 {
                     std::unique_lock<std::mutex> lock(g_mtx);
-                    async_sql.swap(g_async_list);
+                    async_list.swap(g_async_list);
                 }
 
-                for(auto it : async_sql){
+                for(auto it : async_list){
                     execute_async_sql(it);
                 }
             }
@@ -275,9 +294,43 @@ namespace zdb{
         m_is_exited = true;
     }
 
-    bool push_async(const std::string& sql)
+    void db_pool::execute_async_sql(async_sql* ptr_data)
     {
-        std::unique_ptr<std::mutex> lock(m_mtx);
+        std::string error = "";
+        if(!ptr_data){
+            return;
+        }
+
+        if(m_async_conn){
+            my_ulonglong res = 0;
+            res = m_async_conn->execute_real_affect_rows(ptr_data->m_sql.c_str(), error);
+
+            if((my_ulonglong)-1 == res){
+                if(m_async_conn->ping(error) != 0){
+                    db_setting setting = static_cast<db_setting>(m_pool_setting);
+                    m_async_conn->close();
+                    if(m_async_conn->connect(setting, error) < 0){
+                        error = "failed connect to database.";
+                        boost::this_thread::sleep(boost::posix_time::milliseconds(100));
+                    }
+                }
+
+                ptr_data->m_failed_count++;
+                if(ptr_data->m_failed_count < MAX_ASYNC_EXEC_FAILED_COUNT){
+                    std::unique_lock<std::mutex> lock(g_mtx);
+                    g_async_list.push_back(ptr_data);
+                    return;
+                }
+            }
+        }
+
+        delete ptr_data;
+        ptr_data = nullptr;
+    }
+
+    bool db_pool::push_async(const std::string& sql)
+    {
+        std::lock_guard<std::mutex> lock(m_mtx);
         g_async_list.push_back(new async_sql(std::move(sql)));
 
         return true;

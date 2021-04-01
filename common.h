@@ -1,12 +1,37 @@
+/*
+* @file         
+    common.h
+
+* @brief 
+    数据库基础数据结构及常量定义
+
+* @version      
+    V1.0 
+
+* @author       
+    zhuyunfei
+
+* @date         
+    2021/03/31
+
+* @note
+    2021-04-01 添加注释
+    
+* @warning
+* @bug
+* @copyright
+*/
 #ifndef zdb_common_h
 #define zdb_common_h
 #include <string>
-
 namespace zdb{
 
+    const int MAX_ASYNC_EXEC_FAILED_COUNT = 3;      // 最大异步执行失败次数
+    const int MAX_ASYNC_QUEUE_CAPACITY    = 1<<20;  // 异步执行队列最大容量
+
     enum db_pool_size{
-        db_pool_min_size = 1,
-        db_pool_max_size = 60,
+        db_pool_min_size = 1,    // 最小连接数
+        db_pool_max_size = 60,   // 最大连接数
     };
 
     struct db_setting{
@@ -52,7 +77,7 @@ namespace zdb{
         int m_min_size; // 最小连接数
         int m_max_size; // 最大连接数
 
-        db_pool_setting(): m_size(10), m_min_size(1), m_max_size(60)
+        db_pool_setting(): m_size(10), m_min_size(db_pool_size::db_pool_min_size), m_max_size(db_pool_size::db_pool_max_size)
         {}
 
         db_pool_setting(const int size, const int min_size, const int max_size)
