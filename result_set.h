@@ -30,7 +30,7 @@
 #include "helper.h"
 
 namespace zdb{
-    class result_set{
+	class result_set{
         private:
         friend class connection;
 
@@ -414,7 +414,6 @@ namespace zdb{
 	    */
         void close();
     };
-
-};
+}
 
 #endif

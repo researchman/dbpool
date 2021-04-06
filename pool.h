@@ -27,6 +27,7 @@
 #include <list>
 #include <string>
 #include <mutex>
+#include <vector>
 #include <atomic>
 #include "connection.h"
 
@@ -42,6 +43,14 @@ namespace zdb{
         std::atomic<bool> m_is_exited;          // 异步线程退出标志
         ptr_connection m_async_conn;            // 异步线程使用的数据库连接
 
+		public:
+		std::mutex m_async_mtx;
+    	std::vector<async_sql*> m_async_list;
+
+		public:
+		db_pool();
+		~db_pool();
+		
         private:
         /*
 		* @brief    创建一个空闲连接函数。
@@ -113,13 +122,10 @@ namespace zdb{
         void execute_async_sql(async_sql* ptr_data);
 
         public:
-        db_pool();
-        ~db_pool();
-
         /*
 		* @brief    创建数据库连接池函数。
-		* @param    [in]  const db_setting& cfg   数据库连接池设置\n
-		* @param    [out] std::string& error      错误信息\n
+		* @param    [in]  const db_pool_setting& cfg    数据库连接池设置\n
+		* @param    [out] std::string& error      		错误信息\n
 		* @return   返回创建数据库连接池是否成功
 		* @return   true   成功
 		* @return   false  失败
@@ -208,10 +214,14 @@ namespace zdb{
 		*/
 		my_ulonglong execute_real_affect_rows( const char *sql, std::string& error);
     };
-};
+}
 
-typedef boost::serialization::singleton<zdb::db_pool> singleton_db_pool;
-#define zdb_pool singleton_db_pool::get_mutable_instance()
-#define zdb_pool_const singleton_db_pool::get_const_instance()
+typedef boost::serialization::singleton<zdb::db_pool> sdb_pool;
+#define zdb_pool sdb_pool::get_mutable_instance()
+#define zdb_pool_const sdb_pool::get_const_instance()
+
+//: public boost::serialization::singleton<zdb::db_pool>
+//#define zdb_pool zdb::db_pool::get_mutable_instance()
+//#define zdb_pool_const zdb::db_pool::get_const_instance()
 
 #endif

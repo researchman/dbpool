@@ -30,14 +30,16 @@ namespace zdb{
         public:
             static db_helper& instance()
             {
+                static db_helper m_helper;
                 return m_helper;
             }
-        protected:
-            db_helper();
-            ~db_helper();
+        private:
+            db_helper(){};
+            db_helper(const db_helper&){};
+            //~db_helper();
+            db_helper& operator=(const db_helper&);
 
         private: 
-            static db_helper m_helper;
             bool m_flag;
         public:
         /*
@@ -70,8 +72,6 @@ namespace zdb{
 	    */
         void to_string(const MYSQL_TIME& val, char* str, int len);
     };
-
-    db_helper db_helper::m_helper;
-};
+}
 
 #endif

@@ -247,6 +247,6 @@ namespace zdb{
     };
 
     typedef std::shared_ptr<zdb::connection> ptr_connection;
-};
+}
 
 #endif

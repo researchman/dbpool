@@ -204,7 +204,7 @@ namespace zdb{
         }
 
         if(!is_null){
-            strncpy(val, ptr_field, len);
+            strncpy_s(val, sizeof(val), ptr_field, len);
         }
 
         return true;
@@ -238,7 +238,7 @@ namespace zdb{
         }
 
         if(!is_null){
-            val = atof(ptr_field);
+            val = (float)atof(ptr_field);
         }
 
         return true;
@@ -293,63 +293,63 @@ namespace zdb{
     {
         int idx = get_field_idx_by_name(name, error);
 
-        return (idx > 0)?get_field(idx, val, error):false;
+        return (idx >= 0)?get_field(idx, val, error):false;
     }
 
     bool result_set::get_field(const char* name, long long& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
-        return (idx > 0)?get_field(idx, val, error):false;
+        return (idx >= 0)?get_field(idx, val, error):false;
     }
 
     bool result_set::get_field(const char* name, unsigned int& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
-        return (idx > 0)?get_field(idx, val, error):false;
+        return (idx >= 0)?get_field(idx, val, error):false;
     }
 
     bool result_set::get_field(const char* name, std::string& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
-        return (idx > 0)?get_field(idx, val, error):false;
+        return (idx >= 0)?get_field(idx, val, error):false;
     }
 
     bool result_set::get_field(const char* name, char* val, int len, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
-        return (idx > 0)?get_field(idx, val, len, error):false;
+        return (idx >= 0)?get_field(idx, val, len, error):false;
     }
 
     bool result_set::get_field(const char* name, bool& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
-        return (idx > 0)?get_field(idx, val, error):false;
+        return (idx >= 0)?get_field(idx, val, error):false;
     }
 
     bool result_set::get_field(const char* name, float& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
-        return (idx > 0)?get_field(idx, val, error):false;
+        return (idx >= 0)?get_field(idx, val, error):false;
     }
 
     bool result_set::get_field(const char* name, double& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
-        return (idx > 0)?get_field(idx, val, error):false;
+        return (idx >= 0)?get_field(idx, val, error):false;
     }
 
     bool result_set::get_field(const char* name, MYSQL_TIME& val, std::string& error)
     {
         int idx = get_field_idx_by_name(name, error);
 
-        return (idx > 0)?get_field(idx, val, error):false;
+        return (idx >= 0)?get_field(idx, val, error):false;
     }
 
     int result_set::is_null(int idx, std::string& error)
@@ -371,4 +371,4 @@ namespace zdb{
 
         return 0;
     }
-};
+}

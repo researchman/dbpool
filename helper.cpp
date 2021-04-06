@@ -10,9 +10,6 @@
 #include <stdio.h>
 
 namespace zdb{
-    db_helper::db_helper(){}
-    db_helper::~db_helper(){}
-
     void db_helper::init_mysql_time(MYSQL_TIME& val)
     {
         val.year          = 0;
@@ -28,7 +25,7 @@ namespace zdb{
 
     void db_helper::to_datetime(const char* str, MYSQL_TIME& val)
     {
-        sscanf_s(str, "%d-%d-%d %d:%d:%d" &val.year, &val.month, &val.day, &val.hour, &val.minute, &val.second);
+        sscanf_s(str, "%d-%d-%d %d:%d:%d", &val.year, &val.month, &val.day, &val.hour, &val.minute, &val.second);
         val.second_part = 0;
         val.neg = false;
         val.time_type = MYSQL_TIMESTAMP_DATE;
@@ -38,6 +35,6 @@ namespace zdb{
     {
         char buf[20] = {0};
         sprintf_s(buf, "%04d-%02d-%02d %02d:%02d:%02d", val.year, val.month, val.day, val.hour, val.minute, val.second);
-        strncpy(str, buf, len);
+        strncpy_s(str, sizeof(str), buf, len);
     }
-};
+}

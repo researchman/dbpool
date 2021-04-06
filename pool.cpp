@@ -4,13 +4,12 @@
 #include <algorithm>
 
 namespace zdb{
-    std::mutex g_mtx;
-    std::vector<async_sql*> g_async_list;
-
     db_pool::db_pool()
+    : m_running(false)
+    , m_is_exited(false)
+    , m_async_conn(nullptr)
     {
-        g_async_list.reserve(1<<15);
-        m_async_conn = nullptr;
+        m_async_list.reserve(1<<15);  
     }
 
     db_pool::~db_pool()
@@ -56,7 +55,7 @@ namespace zdb{
         return true;
     }
 
-    ptr_connection db_pool::create_connection(std::string& error, bool is_temp = false)
+    ptr_connection db_pool::create_connection(std::string& error, bool is_temp)
     {
         db_setting conn_setting = static_cast<db_setting>(m_pool_setting);
         ptr_connection conn = std::make_shared<zdb::connection>(is_temp);
@@ -64,14 +63,14 @@ namespace zdb{
         if(!conn->connect(conn_setting, error)){
             conn.reset();
             conn = nullptr;
-            return 0;
+            return conn;
         }
 
         if(!conn_setting.m_stmt_sql.empty()){
             if(!conn->prepare_stmt(conn_setting.m_stmt_sql.c_str(), error)){
                 conn.reset();
                 conn = nullptr;
-                return 0;
+                return conn;
             }
         }
 
@@ -115,7 +114,7 @@ namespace zdb{
         ptr_connection ptr_conn = nullptr;
 
         if(m_idle_list.size() > 0){
-            ptr_conn = *(m_idle_list.begin());
+            ptr_conn = *m_idle_list.begin();
             m_idle_list.pop_front();
             m_work_list.push_back(ptr_conn);
         }else{
@@ -206,7 +205,7 @@ namespace zdb{
 
         return ret;
     }
-    my_ulonglong db_pool::execute_real_affect_rows( const char *sql, std::string& error)
+    my_ulonglong db_pool::execute_real_affect_rows(const char *sql, std::string& error)
     {
         ptr_connection conn = get_connect(error);
         if(0 == conn){
@@ -265,25 +264,25 @@ namespace zdb{
         }
 
         {
-            std::unique_lock<std::mutex> lock(g_mtx);
-            std::for_each(g_async_list.begin(), g_async_list.end(),[](async_sql* sql){
+            std::unique_lock<std::mutex> lock(m_async_mtx);
+            std::for_each(m_async_list.begin(), m_async_list.end(),[](async_sql* sql){
                 delete sql;
             });
 
-            g_async_list.clear();
+            m_async_list.clear();
         }
     }
 
     void db_pool::async_thread_func(db_pool* owner)
     {
         while(owner->m_running){
-            if(!g_async_list.empty()){
+            if(!m_async_list.empty()){
                 std::vector<async_sql*> async_list;
                 async_list.reserve(1<<15);
 
                 {
-                    std::unique_lock<std::mutex> lock(g_mtx);
-                    async_list.swap(g_async_list);
+                    std::unique_lock<std::mutex> lock(m_async_mtx);
+                    async_list.swap(m_async_list);
                 }
 
                 for(auto it : async_list){
@@ -312,7 +311,7 @@ namespace zdb{
                 if(m_async_conn->ping(error) != 0){
                     db_setting setting = static_cast<db_setting>(m_pool_setting);
                     m_async_conn->close();
-                    if(m_async_conn->connect(setting, error) < 0){
+                    if(!m_async_conn->connect(setting, error)){
                         error = "failed connect to database.";
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     }
@@ -320,8 +319,8 @@ namespace zdb{
 
                 ptr_data->m_failed_count++;
                 if(ptr_data->m_failed_count < MAX_ASYNC_EXEC_FAILED_COUNT){
-                    std::unique_lock<std::mutex> lock(g_mtx);
-                    g_async_list.push_back(ptr_data);
+                    std::unique_lock<std::mutex> lock(m_async_mtx);
+                    m_async_list.push_back(ptr_data);
                     return;
                 }
             }
@@ -334,7 +333,7 @@ namespace zdb{
     bool db_pool::push_async(const std::string& sql)
     {
         std::lock_guard<std::mutex> lock(m_mtx);
-        g_async_list.push_back(new async_sql(std::move(sql)));
+        m_async_list.push_back(new async_sql(std::move(sql)));
 
         return true;
     }

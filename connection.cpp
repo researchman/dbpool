@@ -36,8 +36,8 @@ namespace zdb{
         }
         mysql_query(m_conn, "set names utf8");
         // 重连
-        char value = 1;
-        mysql_options(m_conn, MYSQL_OPT_RECONNECT, &value);
+        //char value = 1;
+        //mysql_options(m_conn, MYSQL_OPT_RECONNECT, &value);
 
         return true;
     }
